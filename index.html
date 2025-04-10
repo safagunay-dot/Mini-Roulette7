@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mini Roulette ⚡</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <style>
+    body {
+      background: linear-gradient(135deg, #3a1c71, #d76d77, #ffaf7b);
+      background-size: 400% 400%;
+      animation: gradientBG 15s ease infinite;
+      color: #fff;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem;
+    }
+
+    @keyframes gradientBG {
+      0% {background-position: 0% 50%;}
+      50% {background-position: 100% 50%;}
+      100% {background-position: 0% 50%;}
+    }
+
+    input, select, button {
+      margin: 0.5rem;
+      padding: 0.6rem;
+      font-size: 1rem;
+      border-radius: 8px;
+      border: none;
+    }
+
+    button {
+      background: #f90;
+      color: #000;
+      cursor: pointer;
+    }
+
+    #top-section {
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 2rem;
+      margin-bottom: 2rem;
+    }
+
+    #wheel-container {
+      position: relative;
+      width: 300px;
+      height: 300px;
+      border-radius: 50%;
+      border: 8px solid #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+    }
+
+    #wheel {
+      font-size: 4rem;
+      transition: transform 1.5s ease-out;
+    }
+
+    .number-slot {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      background: #fff2;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+    }
+
+    #history-box {
+      width: 250px;
+      max-height: 300px;
+      overflow-y: auto;
+      background: rgba(0,0,0,0.4);
+      padding: 1rem;
+      border-radius: 10px;
+    }
+
+    #controls, #payment-section, #withdraw-section {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 1rem;
+      margin: 1rem 0;
+    }
+
+    #result {
+      margin-top: 1rem;
+      font-size: 1.2rem;
+    }
+
+    #qr {
+      margin: 1rem;
+      background: #fff;
+      display: inline-block;
+      padding: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎰 Mini Roulette ⚡</h1>
+  <p>Bakiye: <span id="balance">0</span> sats</p>
+
+  <div id="top-section">
+    <div id="wheel-container">
+      <div id="wheel">🎯</div>
+    </div>
+    <div id="history-box">
+      <h3>Oyun Geçmişi</h3>
+      <ul id="history"></ul>
+    </div>
+  </div>
+
+  <div id="controls">
+    <input type="number" id="bet" placeholder="Bahis (sats)" min="1"/>
+
+    <select id="number">
+      <option disabled selected value="">Sayı seç (1-10)</option>
+      <option value="1">1</option>
+      <option value="2">2</option>
+      <option value="3">3</option>
+      <option value="4">4</option>
+      <option value="5">5</option>
+      <option value="6">6</option>
+      <option value="7">7</option>
+      <option value="8">8</option>
+      <option value="9">9</option>
+      <option value="10">10</option>
+    </select>
+
+    <select id="color">
+      <option disabled selected value="">Renk seç</option>
+      <option value="red">Kırmızı</option>
+      <option value="black">Siyah</option>
+    </select>
+
+    <button onclick="play()">Oyna</button>
+  </div>
+
+  <div id="rules" style="background: rgba(255,255,255,0.1); padding: 1rem 1.5rem; border-radius: 12px; max-width: 500px; text-align: left; margin-top: 1rem; box-shadow: 0 0 15px rgba(0,0,0,0.3);">
+    <h2 style="margin-bottom: 0.5rem;">📜 Kazanç Kuralları</h2>
+    <ul style="line-height: 1.6;">
+      <li><strong>🎯 Doğru Sayı:</strong> Bahis × 2 kazanırsınız</li>
+      <li><strong>🎨 Doğru Renk (ama sayı yanlış):</strong> Bahis ÷ 2 kazanırsınız</li>
+      <li><strong>❌ Hem sayı hem renk yanlış:</strong> Bahisi kaybedersiniz</li>
+    </ul>
+  </div>
+
+  <div id="payment-section">
+    <input type="text" id="lnaddress" placeholder="sen@speedwallet.me" />
+    <input type="number" id="amount" placeholder="Miktar (sats)" min="10" />
+    <button onclick="generateInvoice()">⚡ Sats Yükle</button>
+    <div id="qr"></div>
+  </div>
+
+  <div id="withdraw-section">
+    <input type="text" id="withdrawAddress" placeholder="LN adresin (sen@speedwallet.me)" />
+    <input type="number" id="withdrawAmount" placeholder="Çekilecek miktar (sats)" />
+    <button onclick="withdrawSats()">⬅️ Sats Çek</button>
+  </div>
+
+  <div id="result"></div>
+
+  <script>
+    let balance = 0;
+
+    function generateInvoice() {
+      const ln = document.getElementById('lnaddress').value.trim();
+      const amount = parseInt(document.getElementById('amount').value);
+      if (!ln || !amount || amount < 10) return alert("Geçerli LN adresi ve miktar gir.");
+
+      const qrDiv = document.getElementById('qr');
+      const lnurl = `lightning:${ln}`;
+      qrDiv.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(lnurl)}&size=200x200" /> 
+        <p>${lnurl}</p>
+        <p><strong>Ödeme yaptıktan sonra manuel olarak bakiyeyi arttırın.</strong></p>`;
+
+      balance += amount;
+      document.getElementById('balance').textContent = balance;
+    }
+
+    function withdrawSats() {
+      const ln = document.getElementById('withdrawAddress').value.trim();
+      const amount = parseInt(document.getElementById('withdrawAmount').value);
+
+      if (!ln || !amount || amount <= 0) return alert("Geçerli bir LN adresi ve miktar gir.");
+      if (amount > balance) return alert("Yetersiz bakiye.");
+
+      balance -= amount;
+      document.getElementById('balance').textContent = balance;
+
+      alert(`${amount} sats şu adrese gönderildi: ${ln} (simülasyon)`);
+    }
+
+    function play() {
+      const bet = parseInt(document.getElementById('bet').value);
+      const number = parseInt(document.getElementById('number').value);
+      const color = document.getElementById('color').value;
+
+      if (!bet || !number || !color) return alert('Tüm alanları doldurun.');
+      if (bet > balance) return alert('Yetersiz bakiye.');
+
+      balance -= bet;
+      document.getElementById('balance').textContent = balance;
+
+      const resultNumber = Math.floor(Math.random() * 10) + 1;
+      const resultColor = Math.random() < 0.5 ? 'red' : 'black';
+
+      const wheel = document.getElementById('wheel');
+      wheel.style.transform = 'rotate(0deg)';
+      setTimeout(() => {
+        wheel.style.transform = `rotate(${360 * 4 + Math.floor(Math.random() * 360)}deg)`;
+      }, 50);
+
+      document.getElementById('result').textContent = 'Çark dönüyor...';
+
+      setTimeout(() => {
+        let win = 0;
+        if (number === resultNumber) {
+          win = bet * 2;
+        } else if (color === resultColor) {
+          win = Math.floor(bet / 2);
+        }
+
+        balance += win;
+        document.getElementById('balance').textContent = balance;
+        document.getElementById('result').innerHTML = `Sonuç: ${resultNumber} - ${resultColor} → Kazanç: ${win} sats`;
+
+        const li = document.createElement('li');
+        li.textContent = `${resultNumber} - ${resultColor} → +${win} sats`;
+        document.getElementById('history').prepend(li);
+      }, 1700);
+    }
+
+    const wheelContainer = document.getElementById('wheel-container');
+    const radius = 130;
+    for (let i = 1; i <= 10; i++) {
+      const angle = (i - 1) * (360 / 10);
+      const x = radius * Math.cos((angle * Math.PI) / 180);
+      const y = radius * Math.sin((angle * Math.PI) / 180);
+      const div = document.createElement('div');
+      div.className = 'number-slot';
+      div.style.left = `${150 + x - 20}px`;
+      div.style.top = `${150 + y - 20}px`;
+      div.textContent = i;
+      div.style.position = 'absolute';
+      wheelContainer.appendChild(div);
+    }
+  </script>
+</body>
+</html>
